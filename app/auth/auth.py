@@ -2,8 +2,12 @@ import json
 import random
 import re
 from datetime import datetime, timezone
+from ..worker import start_worker
 
 EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+async def handle_otp(payload):
+    pass    
 
 
 def validate_email(email: str) -> tuple[bool, str]:

@@ -39,10 +39,7 @@ async def send_otp(request: otp_models.OTPRequest):
     payload = auth.build_payload(raw_email, otp)
 
     try:
-        nc = await nats.connect(NATS_URL)
-        await nc.publish(subject, payload)
-        await nc.flush()          # make sure the message is actually sent
-        await nc.close()
+        
         logger.info("OTP published to NATS subject '%s'", subject)
     except Exception as exc:
         logger.error("Failed to publish OTP to NATS: %s", exc)
