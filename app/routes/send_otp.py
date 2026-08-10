@@ -2,7 +2,7 @@ import nats
 from fastapi import APIRouter, HTTPException
 from models import otp_models
 from auth import auth
-from extensions import NATS_URL
+import os
 
 import logging
 
@@ -10,6 +10,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+NATS_URL = os.getenv("NATS_URL")
 
 @router.post("/auth/send-otp", response_model=otp_models.OTPResponse)
 async def send_otp(request: otp_models.OTPRequest):

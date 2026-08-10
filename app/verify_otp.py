@@ -44,7 +44,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ── Config ────────────────────────────────────────────────────────────────────
-NATS_URL      = os.getenv("NATS_URL", "nats://localhost:4222")
+NATS_URL      = os.getenv("NATS_URL")
 SMTP_HOST     = os.getenv("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT     = int(os.getenv("SMTP_PORT", 587))
 
