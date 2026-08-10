@@ -1,6 +1,8 @@
 import nats
 from fastapi import APIRouter, HTTPException
 from models import otp_models
+from auth import auth
+from extensions import NATS_URL
 
 import logging
 
@@ -22,18 +24,18 @@ async def send_otp(request: otp_models.OTPRequest):
     raw_email = request.email.strip().lower()
 
     # ── Step 1: Validate 
-    is_valid, error_msg = validate_email(raw_email)
+    is_valid, error_msg = auth.validate_email(raw_email)
     if not is_valid:
         logger.warning("Invalid email received: %r — %s", raw_email, error_msg)
         raise HTTPException(status_code=422, detail=error_msg)
 
     # ── Step 2: Generate OTP 
-    otp = generate_otp()
+    otp = auth.generate_otp()
     logger.info("Generated OTP for %s", raw_email)
 
     # ── Step 3: Publish to NATS 
-    subject = build_nats_subject(raw_email)
-    payload = build_payload(raw_email, otp)
+    subject = auth.build_nats_subject(raw_email)
+    payload = auth.build_payload(raw_email, otp)
 
     try:
         nc = await nats.connect(NATS_URL)
