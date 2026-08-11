@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 import os
 import smtplib
@@ -11,9 +10,10 @@ import nats
 import redis.asyncio as aioredis
 from dotenv import load_dotenv
 
-from extensions import NATS_URL
+from app.extension import NATS_URL
+from app.auth import auth
 
-# ── Bootstrap ─────────────────────────────────────────────────────────────────
+# ── Bootstrap 
 load_dotenv()
 
 logging.basicConfig(
@@ -33,13 +33,13 @@ REDIS_DB        = int(os.getenv("REDIS_DB", 0))
 REDIS_PASSWORD  = os.getenv("REDIS_PASSWORD", None)
 OTP_TTL_SECONDS = 5 * 60  # 5 minutes
 
-GMAIL_SENDER    = os.getenv("GMAIL_SENDER")        # your Gmail address
-GMAIL_APP_PASS  = os.getenv("GMAIL_APP_PASSWORD")  # 16-char app password from Google
+GMAIL_SENDER    = os.getenv("GMAIL_SENDER")
+GMAIL_APP_PASS  = os.getenv("GMAIL_APP_PASSWORD")  
 SMTP_HOST       = "smtp.gmail.com"
 SMTP_PORT       = 587  # STARTTLS
 
 
-# ── Startup validation ────────────────────────────────────────────────────────
+# ── Startup validation 
 def _validate_env() -> None:
     missing = []
     if not GMAIL_SENDER:
@@ -51,7 +51,7 @@ def _validate_env() -> None:
         sys.exit(1)
 
 
-# ── Redis helpers ─────────────────────────────────────────────────────────────
+# ── Redis helpers 
 async def store_otp(rc: aioredis.Redis, email: str, otp: str) -> None:
     """
     Stores  key=<email>  value=<otp>  with a 5-minute TTL.
@@ -70,7 +70,7 @@ async def delete_otp(rc: aioredis.Redis, email: str) -> None:
         logger.error("Redis cleanup failed | key=%s | error=%s", email, exc)
 
 
-# ── Gmail SMTP helper ─────────────────────────────────────────────────────────
+# ── Gmail SMTP helper 
 def send_otp_email(to_email: str, otp: str) -> None:
     """
     Sends an OTP email via Gmail SMTP using an app password.
@@ -115,52 +115,32 @@ def send_otp_email(to_email: str, otp: str) -> None:
     logger.info("Email sent via Gmail SMTP | to=%s", to_email)
 
 
-# ── Message handler ───────────────────────────────────────────────────────────
-async def handle_message(rc: aioredis.Redis, msg: nats.aio.client.Msg) -> None:
-    """
-    Processes a single NATS message from subject otp.<email>:
-      1. Parse JSON payload  { email, otp, timestamp }.
-      2. Store in Redis as  email → otp  with 5-min TTL.
-      3. Send OTP via Gmail SMTP.
-      4. On email failure  → delete from Redis, then crash.
-      5. On Redis failure  → crash immediately.
-      6. On bad message    → log and skip (don't crash).
-    """
-    raw = msg.data.decode("utf-8")
-    logger.info("Message received | subject=%s", msg.subject)
+async def handle_message(rc: aioredis.Redis, payload: dict) -> None:  # FIX: was nats.Msg
+    logger.info("Message received")
 
-    # ── 1. Parse ──────────────────────────────────────────────────────────────
     try:
-        payload = json.loads(raw)
-        email   = payload["email"].strip().lower()
-        otp     = str(payload["otp"])
-    except (json.JSONDecodeError, KeyError) as exc:
-        logger.error("Malformed message — skipping | raw=%r | error=%s", raw, exc)
+        email  = payload["email"].strip().lower()
+        otp    = payload.get("otp")
+        action = payload.get("action", "send_otp")
+    except KeyError as exc:
+        logger.error("Malformed payload — skipping | error=%s", exc)
         return
 
-    # ── 2. Redis write ────────────────────────────────────────────────────────
     try:
-        await store_otp(rc, email, otp)
-    except Exception as exc:
-        logger.critical("Redis write failed | email=%s | error=%s", email, exc)
-        logger.critical("Crashing as per error policy.")
-        sys.exit(1)
-
-    # ── 3. Send email ─────────────────────────────────────────────────────────
-    try:
-        send_otp_email(email, otp)
+        if action == "send_otp":
+            send_otp_email(email, otp)
+        elif action == "confirmed":
+            auth.send_confirmation_email(email)
     except Exception as exc:
         logger.critical("Gmail SMTP failed | email=%s | error=%s", email, exc)
-        await delete_otp(rc, email)
-        logger.critical("OTP deleted from Redis. Crashing as per error policy.")
         sys.exit(1)
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# ── Main 
 async def main() -> None:
     _validate_env()
 
-    # ── Redis ─────────────────────────────────────────────────────────────────
+    # ── Redis 
     logger.info("Connecting to Redis | %s:%d db=%d", REDIS_HOST, REDIS_PORT, REDIS_DB)
     rc = aioredis.Redis(
         host=REDIS_HOST,
@@ -176,7 +156,7 @@ async def main() -> None:
         logger.critical("Cannot reach Redis: %s", exc)
         sys.exit(1)
 
-    # ── NATS ──────────────────────────────────────────────────────────────────
+    # ── NATS 
     logger.info("Connecting to NATS | %s", NATS_URL)
     try:
         nc = await nats.connect(NATS_URL)
@@ -186,14 +166,14 @@ async def main() -> None:
         await rc.aclose()
         sys.exit(1)
 
-    # ── Subscribe to otp.* ────────────────────────────────────────────────────
+    # ── Subscribe to otp.* 
     async def on_message(msg: nats.aio.client.Msg) -> None:
         await handle_message(rc, msg)
 
     await nc.subscribe(NATS_SUBJECT, cb=on_message)
     logger.info("Subscribed to '%s'. Waiting for messages...", NATS_SUBJECT)
 
-    # ── Keep alive ────────────────────────────────────────────────────────────
+    # ── Keep alive 
     try:
         while True:
             await asyncio.sleep(1)
