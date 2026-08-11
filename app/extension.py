@@ -17,3 +17,10 @@ async def close_nats():
     if nc:
         await nc.drain()
         nc = None
+
+rc = None
+NATS_URL = os.getenv("NATS_URL")
+
+async def connect_nats():
+    global nc, rc
+    nc = await nats.connect(NATS_URL)
