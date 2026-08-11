@@ -1,5 +1,8 @@
 import nats
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 nc = None
 NATS_URL = os.getenv("NATS_URL")
@@ -13,5 +16,4 @@ async def close_nats():
     global nc
     if nc:
         await nc.drain()
-        await nc.close()
         nc = None
