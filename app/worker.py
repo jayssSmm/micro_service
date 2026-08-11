@@ -1,13 +1,9 @@
 import json
+from app.extension import nc
 
-from extension import nc
+async def start_worker(subject: str, callback) -> None:
+    async def _handler(msg):
+        payload = json.loads(msg.data.decode())
+        await callback(payload)
 
-async def start_worker(subject, callback):
-    subscription = await nc.subscribe(subject)
-
-    async for i in subscription.messages:
-        payload = json.loads(
-            i.data.decode()
-        )
-
-        await callable(payload)
+    await nc.subscribe(subject, cb=_handler)  # FIX: pass cb= directly
