@@ -1,26 +1,3 @@
-"""
-email_worker.py — NATS → SMTP confirmation mailer
-
-Subscribes to the `email.success` subject published by verify_otp.py.
-For every message it receives it sends a sign-in confirmation email to
-the user via SMTP (works with Gmail, SendGrid SMTP relay, Mailtrap, etc.).
-
-Run:
-    python email_worker.py
-
-Required env vars (add to .env):
-    NATS_URL          nats://localhost:4222
-    SMTP_HOST         smtp.gmail.com
-    SMTP_PORT         587
-    SMTP_USER         you@gmail.com
-    SMTP_PASSWORD     your-app-password   (Gmail: create an App Password)
-    EMAIL_FROM        You <you@gmail.com>  (display name + address)
-
-Optional:
-    SMTP_USE_TLS      true   (default true  — uses STARTTLS on port 587)
-                             set false for SSL-on-connect (port 465)
-"""
-
 import asyncio
 import json
 import logging
@@ -34,7 +11,7 @@ from email.mime.text import MIMEText
 import nats
 from dotenv import load_dotenv
 
-# ── Bootstrap ─────────────────────────────────────────────────────────────────
+# ── Bootstrap 
 load_dotenv()
 
 logging.basicConfig(
@@ -43,7 +20,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ── Config ────────────────────────────────────────────────────────────────────
+# ── Config ───
 NATS_URL      = os.getenv("NATS_URL")
 SMTP_HOST     = os.getenv("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT     = int(os.getenv("SMTP_PORT", 587))
@@ -57,7 +34,7 @@ SMTP_USE_TLS  = os.getenv("SMTP_USE_TLS", "true").lower() != "false"
 NATS_SUBJECT  = "email.success"
 
 
-# ── Email builder ─────────────────────────────────────────────────────────────
+# ── Email builder ───
 def build_confirmation_email(to_email: str, user_id: str, verified_at: str) -> MIMEMultipart:
     """
     Returns a MIMEMultipart message with both a plain-text and an HTML part.
@@ -181,7 +158,7 @@ If you didn't request this, please contact support immediately.
     return msg
 
 
-# ── SMTP sender ───────────────────────────────────────────────────────────────
+# ── SMTP sender ─────
 def send_email(msg: MIMEMultipart, to_email: str) -> None:
     """
     Sends *msg* synchronously via SMTP.
@@ -205,7 +182,7 @@ def send_email(msg: MIMEMultipart, to_email: str) -> None:
             server.sendmail(EMAIL_FROM, to_email, msg.as_string())
 
 
-# ── NATS message handler ──────────────────────────────────────────────────────
+# ── NATS message handler ─────
 async def handle_email_success(raw_msg) -> None:
     """
     Called for every message on `email.success`.
@@ -242,7 +219,7 @@ async def handle_email_success(raw_msg) -> None:
         logger.error("Unexpected error sending email | email=%s | error=%s", email, exc)
 
 
-# ── Main loop ─────────────────────────────────────────────────────────────────
+# ── Main loop 
 async def main() -> None:
     if not SMTP_USER or not SMTP_PASSWORD:
         logger.critical(
