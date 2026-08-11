@@ -1,4 +1,4 @@
-from app.extension import nc
+import app.extension as extension
 from fastapi import APIRouter, HTTPException
 from app.models import otp_models
 from app.auth import auth
@@ -39,7 +39,7 @@ async def send_otp(request: otp_models.OTPRequest):
     payload = auth.build_payload(raw_email, otp)
 
     try:
-        await nc.publish(subject, payload)
+        await extension.nc.publish(subject, payload)
         logger.info("OTP published to NATS subject '%s'", subject)
     except Exception as exc:
         logger.error("Failed to publish OTP to NATS: %s", exc)
