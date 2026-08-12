@@ -14,14 +14,6 @@ NATS_URL = os.getenv("NATS_URL")
 
 @router.post("/auth/send-otp", response_model=otp_models.OTPResponse)
 async def send_otp(request: otp_models.OTPRequest):
-    """
-    1. Receive email from the frontend.
-    2. Validate email format.
-    3. Generate a 6-digit OTP.
-    4. Publish it to NATS on subject  otp.<email>
-       with payload  { email, otp, timestamp }.
-    5. Return a success message (OTP is NOT echoed back to the client).
-    """
     raw_email = request.email.strip().lower()
 
     # ── Step 1: Validate 
