@@ -31,8 +31,6 @@ def create_app():
         allow_headers=["*"],
     )
 
-    # Last line of defense: whatever goes wrong, the process itself must
-    # never crash — always return a JSON error instead.
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception):
         logger.exception("Unhandled error on %s %s", request.method, request.url.path)
