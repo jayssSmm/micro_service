@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException
 from app import extension, config
 from app.auth import auth
 from app.models import otp_models
-from app import otp_store
+from app.otp import otp_store
 from app.email.email_utils import send_email_with_retry
 
 logger = logging.getLogger(__name__)

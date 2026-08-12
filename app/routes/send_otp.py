@@ -39,6 +39,7 @@ async def send_otp(request: otp_models.OTPRequest):
 
     if not sent:
         logger.error("Failed to deliver OTP to %s: %s", raw_email, error)
+
         raise HTTPException(
             status_code=503,
             detail="We couldn't send the code to that address. Please try again.",

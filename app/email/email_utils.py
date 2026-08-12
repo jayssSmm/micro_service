@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 def _send_sync(to_email: str, subject: str, body: str) -> None:
     msg = MIMEMultipart()
-    msg["From"] = config.FROM_EMAIL
+    msg["From"] = config.SMTP_USER
     msg["To"] = to_email
     msg["Subject"] = subject
     msg.attach(MIMEText(body, "plain"))
@@ -19,7 +19,7 @@ def _send_sync(to_email: str, subject: str, body: str) -> None:
     with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT, timeout=10) as server:
         server.starttls()
         server.login(config.SMTP_USER, config.SMTP_PASSWORD)
-        server.sendmail(config.FROM_EMAIL, [to_email], msg.as_string())
+        server.sendmail(config.SMTP_USER, [to_email], msg.as_string())
 
 
 async def send_email(to_email: str, subject: str, body: str) -> None:
