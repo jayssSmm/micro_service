@@ -14,7 +14,7 @@ rc = redis.Redis.from_url(config.REDIS_URL, decode_responses=True)
 async def connect_nats():
     global nc
     try:
-        nc = await nats.connect(config.NATS_URL, connect_timeout=5)
+        nc = await nats.connect(config.NATS_URL,  credentials=config.NATS_CREDS_PATH,connect_timeout=5)
         logger.info("Connected to NATS at %s", config.NATS_URL)
     except Exception:
         logger.exception("Could not connect to NATS at startup — falling back to direct SMTP for all sends.")
