@@ -1,4 +1,4 @@
-  const API = 'https://micro-service-k7ti.onrender.com/';
+  const API = 'https://micro-service-k7ti.onrender.com';
   let currentEmail = '';
 
   function show(id) {
