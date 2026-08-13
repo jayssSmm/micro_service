@@ -17,18 +17,20 @@ services:
           name: redis-otp
           property: connectionString
 
-
+      # Synadia Cloud — set this in the Render dashboard
+      # Format: nats://<user>:<password>@<host>:<port>
+      # or the WSS URL if using TLS: tls://<user>:<password>@<host>:<port>
       - key: NATS_URL
-        value: nats://nats-broker:4222
+        sync: false
 
       - key: SMTP_HOST
         value: smtp.gmail.com
       - key: SMTP_PORT
         value: "587"
       - key: SMTP_USER
-        sync: false               # you'll be prompted in the dashboard
+        sync: false
       - key: SMTP_PASSWORD
-        sync: false               # Gmail App Password, not account password
+        sync: false
 
       - key: OTP_TTL_SECONDS
         value: "300"
@@ -40,18 +42,11 @@ services:
         value: "2"
 
       - key: CORS_ORIGINS
-        value: "*"                 # tighten to your real frontend origin(s)
-
-  # ── NATS server (private service, no public URL) ───────────
-  - type: pserv
-    runtime: image
-    name: nats-broker
-    image:
-      url: docker.io/library/nats:2.10-alpine
+        value: "*"
 
   # ── Redis (Render Key Value, managed) ───────────────────────
   - type: keyvalue
     name: redis-otp
     plan: free
-    ipAllowList: []                
-    maxmemoryPolicy: volatile-ttl  
+    ipAllowList: []
+    maxmemoryPolicy: volatile-ttl
