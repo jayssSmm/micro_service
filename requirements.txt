@@ -5,3 +5,4 @@ redis
 dotenv
 sqlalchemy
 asyncpg
+nkeys
