@@ -1,8 +1,8 @@
 # OTP Authentication Service
 
-An email-based OTP authentication service built with **FastAPI, Redis, NATS, and SMTP**.
+An email-based OTP authentication service built with **FastAPI, Redis, NATS, and the Gmail API**.
 
-The service generates a secure OTP, stores it temporarily in Redis, and uses NATS to process email delivery asynchronously through an SMTP server.
+The service generates a secure OTP, stores it temporarily in Redis, and uses NATS to process email delivery asynchronously through the Gmail API.
 
 ## Architecture
 
@@ -26,7 +26,7 @@ Backend API
       NATS Worker
           │
           ▼
-        SMTP
+      Gmail API
           │
           ▼
      User's Email
@@ -67,17 +67,19 @@ The default OTP expiration time is **5 minutes**.
 
 NATS separates the API from the email-delivery process.
 
-The backend publishes an OTP email job to NATS, and a worker consumes the job and sends the email through SMTP. This keeps email delivery separate from the API and allows additional workers to be added later if needed.
+The backend publishes an OTP email job to NATS, and a worker consumes the job and sends the email through the Gmail API. This keeps email delivery separate from the API and allows additional workers to be added later if needed.
 
-If NATS is unavailable, the application can fall back to direct SMTP delivery.
+If NATS is unavailable, the application can fall back to direct Gmail API delivery.
 
-## Why SMTP?
+## Why the Gmail API (not SMTP)?
 
-SMTP was chosen because it is the **standard protocol for sending emails and is very easy to set up**.
+The service originally used SMTP (`smtplib`) with Gmail's SMTP server. This was switched to the **Gmail API over HTTPS** for one main reason: **Render's free-tier web services block outbound traffic on SMTP ports 25, 465, and 587**, which made direct SMTP delivery impossible on Render's free instance type.
 
-Most email providers already provide SMTP servers, and Python has built-in SMTP support through `smtplib`. This avoids introducing another third-party email service and keeps the project simple.
+The Gmail API sends mail over standard HTTPS (port 443), so it isn't affected by this restriction and works on Render's free tier without upgrading to a paid instance.
 
-Services such as SendGrid, Mailgun, or Amazon SES could be used for a production-scale system, but SMTP is sufficient for this assignment and requires minimal configuration.
+Authentication uses OAuth2 (Client ID, Client Secret, and a long-lived refresh token) rather than a Gmail App Password. The refresh token is generated **once**, locally, via a one-time OAuth consent flow — not as part of the running application.
+
+Services such as SendGrid, Mailgun, Resend, or Amazon SES are common production alternatives, but most either require a verified custom domain or restrict free-tier sending to a single verified address, which didn't fit this project's requirements. The Gmail API was chosen as a free, domain-free option that could send to arbitrary recipients.
 
 ---
 
@@ -87,7 +89,7 @@ Services such as SendGrid, Mailgun, or Amazon SES could be used for a production
 * **Server:** Uvicorn
 * **Cache / OTP Storage:** Redis
 * **Message Broker:** NATS
-* **Email:** SMTP
+* **Email:** Gmail API (OAuth2)
 * **Language:** Python
 
 ---
@@ -123,17 +125,38 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-### 4. Configure environment variables
+### 4. Set up Gmail API credentials (one-time)
+
+The Gmail API requires an OAuth2 Client ID/Secret and a refresh token, generated once via Google Cloud Console:
+
+1. Create a project in [Google Cloud Console](https://console.cloud.google.com), enable the **Gmail API**.
+2. Configure the **OAuth consent screen** (External, add your sending Gmail account as a **Test user**).
+3. Create an **OAuth Client ID** of type **Desktop app**, download the credentials JSON.
+4. Run the included one-time script to complete the OAuth flow and obtain a refresh token:
+
+   ```bash
+   pip install google-auth-oauthlib google-api-python-client
+   python get_gmail_token.py
+   ```
+
+   This opens a browser, asks you to log into the sending Gmail account, and prints/saves `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, and `GMAIL_REFRESH_TOKEN`.
+
+> **Note:** While the OAuth consent screen is in "Testing" mode, refresh tokens expire after 7 days. Publish the app (Google Auth Platform → Audience → Publish) to remove this expiry — full Google verification is generally not required for the `gmail.send` scope alone.
+
+### 5. Configure environment variables
 
 Create a `.env` file in the project root:
 
 ```env
-SMTP_USER=<your_gmail>
-SMTP_PASSWORD=<app_password>
+GMAIL_CLIENT_ID=<from step 4>
+GMAIL_CLIENT_SECRET=<from step 4>
+GMAIL_REFRESH_TOKEN=<from step 4>
+GMAIL_SENDER_EMAIL=<the gmail account used to authorize>
 
 REDIS_URL=<redis_url>
 
 NATS_URL=<nats_url>
+NATS_CREDS_PATH=<path_to_nats.creds_file>
 ```
 
 For local services, for example:
@@ -143,7 +166,7 @@ REDIS_URL=redis://127.0.0.1:6379
 NATS_URL=nats://localhost:4222
 ```
 
-For Gmail, use a **Google App Password** for `SMTP_PASSWORD`.
+`credentials.json` and `nats.creds` should never be committed — both are already covered by `.gitignore`.
 
 ---
 
@@ -217,15 +240,17 @@ A maximum of **5 incorrect attempts** is allowed by default. After successful ve
 
 The following values can be configured through environment variables:
 
-| Variable                     |          Default | Description                |
-| ---------------------------- | ---------------: | -------------------------- |
-| `OTP_TTL_SECONDS`            |            `300` | OTP expiration time        |
-| `MAX_OTP_ATTEMPTS`           |              `5` | Maximum incorrect attempts |
-| `NATS_OTP_REQUEST_TIMEOUT`   |             `20` | NATS request timeout       |
-| `SMTP_RETRY_BACKOFF_SECONDS` |              `2` | SMTP retry delay           |
-| `SMTP_HOST`                  | `smtp.gmail.com` | SMTP server                |
-| `SMTP_PORT`                  |            `587` | SMTP port                  |
-| `CORS_ORIGINS`               |              `*` | Allowed frontend origins   |
+| Variable                     |          Default | Description                          |
+| ----------------------------- | ---------------: | ------------------------------------ |
+| `OTP_TTL_SECONDS`             |            `300` | OTP expiration time                  |
+| `MAX_OTP_ATTEMPTS`            |              `5` | Maximum incorrect attempts           |
+| `NATS_OTP_REQUEST_TIMEOUT`    |             `20` | NATS request timeout                 |
+| `SMTP_RETRY_BACKOFF_SECONDS`  |              `2` | Email retry delay                    |
+| `GMAIL_CLIENT_ID`             |                 — | Gmail API OAuth2 client ID           |
+| `GMAIL_CLIENT_SECRET`         |                 — | Gmail API OAuth2 client secret       |
+| `GMAIL_REFRESH_TOKEN`         |                 — | Gmail API OAuth2 refresh token       |
+| `GMAIL_SENDER_EMAIL`          |                 — | Gmail address used as the sender     |
+| `CORS_ORIGINS`                |              `*` | Allowed frontend origins             |
 
 ---
 
@@ -250,6 +275,7 @@ The following values can be configured through environment variables:
 │   │   ├── send_otp.py
 │   │   └── verify_otp.py
 │   └── worker.py
+├── get_gmail_token.py
 ├── requirements.txt
 ├── templates
 │   ├── index.html
@@ -264,8 +290,13 @@ The following values can be configured through environment variables:
 * OTPs automatically expire through Redis TTL.
 * OTP verification is limited to a maximum number of attempts.
 * OTPs are deleted after successful verification.
-* SMTP credentials are stored in environment variables.
-* `.env` should never be committed to the repository.
+* Gmail API credentials (Client ID/Secret/Refresh Token) and NATS credentials are stored in environment variables / secret files, never in source.
+* `.env`, `credentials.json`, `gmail_token_output.json`, and `nats.creds` are all excluded via `.gitignore`.
+
+## Deployment Notes
+
+* Hosted on **Render's free tier**, which blocks outbound SMTP ports (25/465/587). Email delivery uses the Gmail API over HTTPS instead, which is unaffected by this restriction.
+* NATS is hosted via **Synadia Cloud** and connected over the standard NATS client port (4222), which is not restricted on Render's free tier.
 
 ## Assignment Deliverables
 
