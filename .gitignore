@@ -2,4 +2,6 @@
 nats*
 .env
 __pycache__/
-app.zip
+credentials.json
+gmail_token_output.json
+get_gmail_token.py

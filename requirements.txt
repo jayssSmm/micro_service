@@ -5,3 +5,5 @@ redis
 dotenv
 sqlalchemy
 asyncpg
+httpx
+google-auth

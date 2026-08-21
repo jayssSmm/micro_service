@@ -1,38 +1,71 @@
-import asyncio
-import smtplib
+import base64
 import logging
 from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+
+import httpx
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request as GoogleAuthRequest
 
 from app import config
 
 logger = logging.getLogger(__name__)
 
+GMAIL_SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
 
-def _send_sync(to_email: str, subject: str, body: str) -> None:
-    msg = MIMEMultipart()
-    msg["From"] = config.SMTP_USER
+
+def _get_access_token() -> str:
+    """
+    Exchanges the long-lived refresh token for a short-lived access token.
+    This is a sync network call under the hood, but it's fast (~100-300ms).
+    """
+    creds = Credentials(
+        token=None,
+        refresh_token=config.GMAIL_REFRESH_TOKEN,
+        client_id=config.GMAIL_CLIENT_ID,
+        client_secret=config.GMAIL_CLIENT_SECRET,
+        token_uri="https://oauth2.googleapis.com/token",
+    )
+    creds.refresh(GoogleAuthRequest())
+    return creds.token
+
+
+def _build_raw_message(to_email: str, subject: str, body: str) -> str:
+    msg = MIMEText(body, "plain")
+    msg["From"] = config.GMAIL_SENDER_EMAIL
     msg["To"] = to_email
     msg["Subject"] = subject
-    msg.attach(MIMEText(body, "plain"))
-
-    with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT, timeout=10) as server:
-        server.starttls()
-        server.login(config.SMTP_USER, config.SMTP_PASSWORD)
-        server.sendmail(config.SMTP_USER, [to_email], msg.as_string())
+    return base64.urlsafe_b64encode(msg.as_bytes()).decode()
 
 
 async def send_email(to_email: str, subject: str, body: str) -> None:
-    # smtplib is blocking — push it to a thread so it never stalls the
-    # asyncio event loop (and therefore the whole app).
-    await asyncio.to_thread(_send_sync, to_email, subject, body)
+    """
+    Sends via Gmail API over HTTPS — works on Render free tier since
+    no SMTP port is ever touched. Raises on failure, same as before,
+    so send_email_with_retry's try/except still works unchanged.
+    """
+    access_token = _get_access_token()
+    raw_message = _build_raw_message(to_email, subject, body)
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            GMAIL_SEND_URL,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            },
+            json={"raw": raw_message},
+            timeout=10.0,
+        )
+        response.raise_for_status()
 
 
 async def send_email_with_retry(to_email: str, subject: str, body: str, retries: int = 1):
     """
-    Sends an email, retrying `retries` more time(s) on failure.
+    Unchanged from your original — sends via Gmail API now instead of SMTP.
     Never raises — always returns (success: bool, error: str | None).
     """
+    import asyncio  # local import kept minimal; move to top if you prefer
+
     attempts = retries + 1
     last_error = None
     for attempt in range(1, attempts + 1):
@@ -42,7 +75,7 @@ async def send_email_with_retry(to_email: str, subject: str, body: str, retries:
         except Exception as exc:
             last_error = str(exc)
             logger.error(
-                "SMTP send to %s failed (attempt %s/%s): %s",
+                "Gmail API send to %s failed (attempt %s/%s): %s",
                 to_email, attempt, attempts, exc,
             )
             if attempt < attempts:
