@@ -8,3 +8,4 @@ asyncpg
 google-auth==2.56.3
 httpx==0.28.1
 requests      
+nkeys
