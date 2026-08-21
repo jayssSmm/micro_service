@@ -5,4 +5,5 @@ redis
 dotenv
 sqlalchemy
 asyncpg
-nkeys
+google-auth==2.56.3
+httpx==0.28.1
