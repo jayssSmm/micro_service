@@ -1,0 +1,52 @@
+services:
+  - type: web
+    runtime: python
+    name: otp-auth-api
+    plan: free                     # bump when you outgrow it
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn wsgi:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.0"
+
+      # Redis (Render Key Value) — auto-filled from the service below
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: redis-otp
+          property: connectionString
+
+      # Synadia Cloud — set this in the Render dashboard
+      # Format: nats://<user>:<password>@<host>:<port>
+      # or the WSS URL if using TLS: tls://<user>:<password>@<host>:<port>
+      - key: NATS_URL
+        sync: false
+
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+
+      - key: OTP_TTL_SECONDS
+        value: "300"
+      - key: MAX_OTP_ATTEMPTS
+        value: "5"
+      - key: NATS_OTP_REQUEST_TIMEOUT
+        value: "20"
+      - key: SMTP_RETRY_BACKOFF_SECONDS
+        value: "2"
+
+      - key: CORS_ORIGINS
+        value: "*"
+
+  # ── Redis (Render Key Value, managed) ───────────────────────
+  - type: keyvalue
+    name: redis-otp
+    plan: free
+    ipAllowList: []
+    maxmemoryPolicy: volatile-ttl
